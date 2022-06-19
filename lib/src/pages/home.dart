@@ -21,7 +21,6 @@ class _HomePageState extends State<HomePage> {
     // TODO: implement initState
     final socketService = Provider.of<SocketService>(context, listen: false);
     socketService.socket.on('bands', (data) {
-      print('payload: $data');
       bands =
           (data as List<dynamic>).map((band) => Band.fromMap(band)).toList();
       setState(() {});
@@ -108,17 +107,7 @@ class _HomePageState extends State<HomePage> {
                   style: TextStyle(color: GlobalColors.primary),
                 ),
                 onPressed: () {
-                  try {
-                    final socketService =
-                        Provider.of<SocketService>(context, listen: false);
-                    socketService.socket
-                        .emit('add-band', {'name': nameBandController.text});
-                    Navigator.of(context).pop();
-                  } catch (e) {
-                    print(e);
-                    Navigator.of(context).pop();
-                  }
-
+                  addBandToList(nameBandController.text);
                 },
               ),
             ],
@@ -164,8 +153,8 @@ class _HomePageState extends State<HomePage> {
 
   void addBandToList(String name) {
     if (name.isNotEmpty) {
-      bands.add(Band(id: (bands.length + 1).toString(), name: name, votes: 0));
-      setState(() {});
+      final socketService = Provider.of<SocketService>(context, listen: false);
+      socketService.socket.emit('add-band', {'name': name});
     }
     Navigator.pop(context);
   }
