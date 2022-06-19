@@ -4,6 +4,9 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:band_names/src/models/band.dart';
 import 'package:band_names/src/utils/colors.dart';
+import 'package:provider/provider.dart';
+
+import '../services/sockets.dart';
 
 class HomePage extends StatefulWidget {
   @override
@@ -11,12 +14,27 @@ class HomePage extends StatefulWidget {
 }
 
 class _HomePageState extends State<HomePage> {
-  List<Band> bands = [
-    Band(id: '1', name: 'Metallica', votes: 0),
-    Band(id: '2', name: 'Iron Maiden', votes: 4),
-    Band(id: '3', name: 'Rammstein', votes: 2),
-    Band(id: '4', name: 'Heroes del Silencio', votes: 8),
-  ];
+  List<Band> bands = [];
+
+  @override
+  void initState() {
+    // TODO: implement initState
+    final socketService = Provider.of<SocketService>(context, listen: false);
+    socketService.socket.on('bands', (data) {
+      print('payload: $data');
+      bands =
+          (data as List<dynamic>).map((band) => Band.fromMap(band)).toList();
+      setState(() {});
+    });
+    super.initState();
+  }
+
+  @override
+  void dispose() {
+    final socketService = Provider.of<SocketService>(context, listen: false);
+    socketService.socket.off('bands');
+    super.dispose();
+  }
 
   Widget build(BuildContext context) {
     deletedBand(String id) {
@@ -24,11 +42,29 @@ class _HomePageState extends State<HomePage> {
       setState(() {});
     }
 
+    SocketService socketService = Provider.of<SocketService>(context);
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('Bands'),
         backgroundColor: GlobalColors.primaryDark,
         elevation: 1,
+        actions: <Widget>[
+          Container(
+            margin: EdgeInsets.only(right: 10),
+            child: (socketService.serverStatus == ServerStatus.online)
+                ? const Icon(
+                    Icons.check_circle_outline,
+                    color: GlobalColors.secondary,
+                    size: 25,
+                  )
+                : const Icon(
+                    Icons.offline_bolt,
+                    color: GlobalColors.primaryDanger,
+                    size: 25,
+                  ),
+          ),
+        ],
       ),
       body: ListView.builder(
           itemCount: bands.length,
@@ -72,7 +108,17 @@ class _HomePageState extends State<HomePage> {
                   style: TextStyle(color: GlobalColors.primary),
                 ),
                 onPressed: () {
-                  addBandToList(nameBandController.text);
+                  try {
+                    final socketService =
+                        Provider.of<SocketService>(context, listen: false);
+                    socketService.socket
+                        .emit('add-band', {'name': nameBandController.text});
+                    Navigator.of(context).pop();
+                  } catch (e) {
+                    print(e);
+                    Navigator.of(context).pop();
+                  }
+
                 },
               ),
             ],
@@ -123,40 +169,41 @@ class _HomePageState extends State<HomePage> {
     }
     Navigator.pop(context);
   }
-}
 
-Widget _listTileWidget(Band band, deleteBand) {
-  return Dismissible(
-      key: Key(band.id!),
-      direction: DismissDirection.startToEnd,
-      onDismissed: (direction) {
-        deleteBand(band.id);
-      },
-      background: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 20),
-        color: GlobalColors.primaryDanger,
-        child: const Align(
-          alignment: Alignment.centerLeft,
-          child: Icon(
-            Icons.delete,
-            color: Colors.white,
+  Widget _listTileWidget(Band band, deleteBand) {
+    final socketService = Provider.of<SocketService>(context, listen: false);
+    return Dismissible(
+        key: Key(band.id!),
+        direction: DismissDirection.startToEnd,
+        onDismissed: (direction) {
+          deleteBand(band.id);
+        },
+        background: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 20),
+          color: GlobalColors.primaryDanger,
+          child: const Align(
+            alignment: Alignment.centerLeft,
+            child: Icon(
+              Icons.delete,
+              color: Colors.white,
+            ),
           ),
         ),
-      ),
-      child: ListTile(
-        leading: CircleAvatar(
-          child: Text(band.name!.substring(0, 2)),
-          backgroundColor: GlobalColors.primary,
-        ),
-        title: Text(band.name!,
-            style: const TextStyle(fontWeight: FontWeight.bold)),
-        trailing: Text(
-          '${band.votes}',
-          style:
-              const TextStyle(fontSize: 20, color: GlobalColors.primaryDanger),
-        ),
-        onTap: () {
-          print(band.name);
-        },
-      ));
+        child: ListTile(
+          leading: CircleAvatar(
+            child: Text(band.name!.substring(0, 2)),
+            backgroundColor: GlobalColors.primary,
+          ),
+          title: Text(band.name!,
+              style: const TextStyle(fontWeight: FontWeight.bold)),
+          trailing: Text(
+            '${band.votes}',
+            style: const TextStyle(
+                fontSize: 20, color: GlobalColors.primaryDanger),
+          ),
+          onTap: () {
+            socketService.socket.emit('vote', {'id': band.id});
+          },
+        ));
+  }
 }

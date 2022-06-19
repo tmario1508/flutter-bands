@@ -4,20 +4,31 @@ import 'package:socket_io_client/socket_io_client.dart';
 enum ServerStatus { online, offline, connecting }
 
 class SocketService with ChangeNotifier {
-  final ServerStatus _serverStatus = ServerStatus.connecting;
+  ServerStatus _serverStatus = ServerStatus.connecting;
+  Socket? _socket;
+  ServerStatus get serverStatus => _serverStatus;
+  Socket get socket => _socket!;
 
   SocketService() {
     _initConfig();
   }
 
   void _initConfig() {
-    Socket socket = io(
+    _socket = io(
         'http://192.168.2.10:3005',
         OptionBuilder()
             .setTransports(['websocket'])
             .enableAutoConnect()
             .build());
-    socket.onConnect((_) => print('connect'));
-    socket.onDisconnect((_) => print('disconnect'));
+    _socket!.onConnect((_) {
+      print('conectado');
+      _serverStatus = ServerStatus.online;
+      notifyListeners();
+    });
+    _socket!.onDisconnect((_) {
+      print('desconectado');
+      _serverStatus = ServerStatus.offline;
+      notifyListeners();
+    });
   }
 }
