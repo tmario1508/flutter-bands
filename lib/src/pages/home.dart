@@ -2,9 +2,10 @@ import 'dart:io';
 
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import 'package:pie_chart/pie_chart.dart';
 import 'package:band_names/src/models/band.dart';
 import 'package:band_names/src/utils/colors.dart';
-import 'package:provider/provider.dart';
 
 import '../services/sockets.dart';
 
@@ -20,11 +21,7 @@ class _HomePageState extends State<HomePage> {
   void initState() {
     // TODO: implement initState
     final socketService = Provider.of<SocketService>(context, listen: false);
-    socketService.socket.on('bands', (data) {
-      bands =
-          (data as List<dynamic>).map((band) => Band.fromMap(band)).toList();
-      setState(() {});
-    });
+    socketService.socket.on('bands', _handleActiveBands);
     super.initState();
   }
 
@@ -35,12 +32,12 @@ class _HomePageState extends State<HomePage> {
     super.dispose();
   }
 
-  Widget build(BuildContext context) {
-    deletedBand(String id) {
-      bands.removeWhere((band) => band.id == id);
-      setState(() {});
-    }
+  _handleActiveBands(dynamic data) {
+    bands = (data as List<dynamic>).map((band) => Band.fromMap(band)).toList();
+    setState(() {});
+  }
 
+  Widget build(BuildContext context) {
     SocketService socketService = Provider.of<SocketService>(context);
 
     return Scaffold(
@@ -65,9 +62,17 @@ class _HomePageState extends State<HomePage> {
           ),
         ],
       ),
-      body: ListView.builder(
-          itemCount: bands.length,
-          itemBuilder: (context, i) => _listTileWidget(bands[i], deletedBand)),
+      body: Column(
+        children: <Widget>[
+          _showGraph(bands),
+          Expanded(
+            child: ListView.builder(
+                itemCount: bands.length,
+                itemBuilder: (context, i) =>
+                    _listTileWidget(bands[i], deletedBand, i)),
+          ),
+        ],
+      ),
       floatingActionButton: FloatingActionButton(
         child: const Icon(Icons.add),
         backgroundColor: GlobalColors.primary,
@@ -159,7 +164,56 @@ class _HomePageState extends State<HomePage> {
     Navigator.pop(context);
   }
 
-  Widget _listTileWidget(Band band, deleteBand) {
+  deletedBand(String id) {
+    final socketService = Provider.of<SocketService>(context, listen: false);
+    socketService.socket.emit('delete-band', {'id': id});
+  }
+
+  final listColors = [
+    Colors.blue,
+    Colors.red,
+    Color.fromARGB(255, 43, 124, 46),
+    Color.fromARGB(255, 163, 104, 16),
+    Colors.purple,
+    Colors.pink,
+    Colors.brown,
+    Colors.black,
+  ];
+
+  Widget _showGraph(bands) {
+    Map<String, double> dataMap = new Map();
+    bands.forEach((band) {
+      dataMap.putIfAbsent(band.name, () => band.votes.toDouble());
+    });
+
+    return Container(
+      width: double.infinity,
+      height: 200,
+      child: PieChart(
+        dataMap: dataMap,
+        animationDuration: Duration(milliseconds: 800),
+        chartLegendSpacing: 32,
+        chartRadius: MediaQuery.of(context).size.width / 2.7,
+        colorList: listColors,
+        chartType: ChartType.ring,
+        ringStrokeWidth: 28,
+        legendOptions: const LegendOptions(
+          legendPosition: LegendPosition.right,
+          legendTextStyle: TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
+        ),
+        chartValuesOptions: const ChartValuesOptions(
+          showChartValueBackground: false,
+          decimalPlaces: 0,
+          chartValueStyle: TextStyle(
+            color: GlobalColors.primaryDark,
+            fontSize: 20,
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _listTileWidget(Band band, deleteBand, i) {
     final socketService = Provider.of<SocketService>(context, listen: false);
     return Dismissible(
         key: Key(band.id!),
@@ -181,14 +235,17 @@ class _HomePageState extends State<HomePage> {
         child: ListTile(
           leading: CircleAvatar(
             child: Text(band.name!.substring(0, 2)),
-            backgroundColor: GlobalColors.primary,
+            backgroundColor: listColors[i],
           ),
           title: Text(band.name!,
-              style: const TextStyle(fontWeight: FontWeight.bold)),
+              style:
+                  TextStyle(fontWeight: FontWeight.bold, color: listColors[i])),
           trailing: Text(
             '${band.votes}',
-            style: const TextStyle(
-                fontSize: 20, color: GlobalColors.primaryDanger),
+            style: TextStyle(
+                fontSize: 20,
+                color: listColors[i],
+                fontWeight: FontWeight.bold),
           ),
           onTap: () {
             socketService.socket.emit('vote', {'id': band.id});
